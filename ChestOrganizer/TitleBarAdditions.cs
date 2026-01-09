@@ -75,7 +75,19 @@ public class TitleBarAdditions {
         => (inventory as MergedInventory)?.Split();
 
     private void Sort() {
-        var comparer = api.ModifierDown(Modifier.Shift) ? Comparer.Name : Comparer.Code;
+        Comparer comparer;
+
+        if (api.ModifierDown(Modifier.Control)) {
+            // Ctrl - Sort by perish time
+            comparer = Comparer.CreatePerish(api.World, inventory);
+        } else if (api.ModifierDown(Modifier.Shift)) {
+            // Shift - Sort by name
+            comparer = Comparer.Name;
+        } else {
+            // No modifier - Sort by code
+            comparer = Comparer.Code;
+        }
+
         inventory.Sort(comparer, api);
     }
 

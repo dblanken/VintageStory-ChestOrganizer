@@ -10,6 +10,46 @@ public class Comparer : IComparer<ItemStack> {
     public static readonly Comparer Code     = new(ByCodePath, ByCodeDomain, ByAmount);
     public static readonly Comparer TypeName = new(ByType, ByName, ByAmount);
 
+    public static Comparer CreatePerish(IWorldAccessor world, IInventory inventory)
+        => new(ByPerishTime(world, inventory), ByCodePath, ByCodeDomain, ByAmount);
+
+    private static CompareFunc ByPerishTime(IWorldAccessor world, IInventory inventory) {
+        // Build a map of ItemStack references to their slots
+        var slotMap = new System.Collections.Generic.Dictionary<ItemStack, ItemSlot>();
+        for (int i = 0; i < inventory.Count; i++) {
+            var slot = inventory[i];
+            if (slot?.Itemstack != null) {
+                slotMap[slot.Itemstack] = slot;
+            }
+        }
+
+        return (ItemStack x, ItemStack y) => {
+            // Look up slots for these stacks
+            slotMap.TryGetValue(x, out var xSlot);
+            slotMap.TryGetValue(y, out var ySlot);
+
+            // Get transition states for both items
+            var xState = xSlot != null ? x?.Collectible?.UpdateAndGetTransitionState(
+                world, xSlot, EnumTransitionType.Perish) : null;
+            var yState = ySlot != null ? y?.Collectible?.UpdateAndGetTransitionState(
+                world, ySlot, EnumTransitionType.Perish) : null;
+
+            // Both perishable - compare by time remaining (ascending)
+            if (xState != null && yState != null) {
+                return xState.FreshHoursLeft.CompareTo(yState.FreshHoursLeft);
+            }
+
+            // Only x is perishable - x comes first (negative)
+            if (xState != null) return -1;
+
+            // Only y is perishable - y comes first (positive)
+            if (yState != null) return 1;
+
+            // Neither perishable - equal (falls through to next comparer)
+            return 0;
+        };
+    }
+
     private static bool CompareNullableEnum<T>(T x, T y, out int res) {
         if (x == null) {
             res = (y == null) ? 0 : -1;
