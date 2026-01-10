@@ -49,79 +49,33 @@ public class Comparer : IComparer<ItemStack> {
     private static double? GetPerishHours(IWorldAccessor world, ItemSlot slot, ItemStack stack) {
         if (slot == null || stack == null) return null;
 
-        // Try getting active transition state from the container itself
-        var state = stack.Collectible?.UpdateAndGetTransitionState(world, slot, EnumTransitionType.Perish);
-        if (state != null) {
-            world.Logger.Debug($"[PerishSort] Container {stack.GetName()} has TransitionState: {state.FreshHoursLeft:F2}h");
-            return state.FreshHoursLeft;
-        }
+        // Generate tooltip text to parse perish time
+        var sb = new System.Text.StringBuilder();
+        stack.Collectible?.GetHeldItemInfo(slot, sb, world, false);
+        string tooltip = sb.ToString();
 
-        // world.Logger.Debug($"[PerishSort] Container {stack.GetName()} has NO TransitionState (sealed)");
+        // Parse "Fresh for X days" or "Fresh for X.X years" from tooltip
+        var match = System.Text.RegularExpressions.Regex.Match(tooltip, @"Fresh for ([\d.]+) (day|year)s?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        // For sealed crocks/meals, get perish time from contents
-        if (stack.Attributes != null) {
-            var contents = stack.Attributes.GetTreeAttribute("contents");
-            if (contents != null) {
-                var firstItem = contents.GetItemstack("0");
-                if (firstItem != null && firstItem.Attributes != null) {
-                    var foodTransState = firstItem.Attributes.GetTreeAttribute("transitionstate");
-                    if (foodTransState != null) {
-                        var freshHoursArray = foodTransState["freshHours"] as Vintagestory.API.Datastructures.FloatArrayAttribute;
-                        var transitionHoursArray = foodTransState["transitionHours"] as Vintagestory.API.Datastructures.FloatArrayAttribute;
-                        var transitionedHoursArray = foodTransState["transitionedHours"] as Vintagestory.API.Datastructures.FloatArrayAttribute;
+        if (match.Success) {
+            if (double.TryParse(match.Groups[1].Value, out double value)) {
+                string unit = match.Groups[2].Value.ToLower();
+                double hours;
 
-                        if (freshHoursArray != null && freshHoursArray.value != null && freshHoursArray.value.Length > 0) {
-                            // Use the MINIMUM remaining time (soonest to spoil)
-                            float minFreshHours = freshHoursArray.value[0];
-                            float minTransitionHours = transitionHoursArray?.value?[0] ?? 0;
-                            float minTransitionedHours = transitionedHoursArray?.value?[0] ?? 0;
-
-                            for (int i = 1; i < freshHoursArray.value.Length; i++) {
-                                if (freshHoursArray.value[i] < minFreshHours) {
-                                    minFreshHours = freshHoursArray.value[i];
-                                    minTransitionHours = transitionHoursArray?.value?[i] ?? 0;
-                                    minTransitionedHours = transitionedHoursArray?.value?[i] ?? 0;
-                                }
-                            }
-
-                            world.Logger.Debug($"[PerishSort] Sealed {stack.GetName()} raw values: fresh={minFreshHours:F2}, trans={minTransitionHours:F2}, transitioned={minTransitionedHours:F2}");
-
-                            if (minFreshHours > 0) {
-                                // For sealed items, stored values are in DAYS
-                                // Only use freshHours - transitionedHours (sealed items don't enter transition state)
-                                double remainingDays = minFreshHours - minTransitionedHours;
-
-                                // Get the container's perish rate for this food type
-                                double transitionRate = 0.1; // Default to 0.1x (other/protein)
-
-                                // Try to get the actual rate from the food's nutrition properties
-                                if (firstItem.Collectible?.NutritionProps != null) {
-                                    var foodCat = firstItem.Collectible.NutritionProps.FoodCategory;
-                                    world.Logger.Debug($"[PerishSort] Food category: {foodCat}");
-
-                                    // Container rates: Vegetable 0.08x, Grain 0.05x, Protein/Dairy/Other 0.1x
-                                    if (foodCat == EnumFoodCategory.Vegetable) {
-                                        transitionRate = 0.08;
-                                    } else if (foodCat == EnumFoodCategory.Grain) {
-                                        transitionRate = 0.05;
-                                    }
-                                }
-
-                                // Divide by transition rate to get real-world days, then convert to hours
-                                double realWorldDays = remainingDays / transitionRate;
-                                double realWorldHours = realWorldDays * 24;
-
-                                world.Logger.Debug($"[PerishSort] Sealed {stack.GetName()} -> {remainingDays:F2}d / {transitionRate} = {realWorldDays:F1}d ({realWorldDays/365:F1}y) = {realWorldHours:F0}h");
-
-                                return realWorldHours;
-                            }
-                        }
-                    }
+                if (unit == "day") {
+                    hours = value * 24;
+                } else if (unit == "year") {
+                    hours = value * 365 * 24;
+                } else {
+                    return null;
                 }
+
+                world.Logger.Debug($"[PerishSort] {stack.GetName()} -> Fresh for {value} {unit}s = {hours:F0}h ({hours/24:F1}d, {hours/24/365:F2}y)");
+                return hours;
             }
         }
 
-        // No perish information found
+        // No perish information found in tooltip
         return null;
     }
 
