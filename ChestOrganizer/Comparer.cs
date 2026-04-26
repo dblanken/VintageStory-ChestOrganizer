@@ -54,15 +54,22 @@ public class Comparer : IComparer<ItemStack> {
         stack.Collectible?.GetHeldItemInfo(slot, sb, world, false);
         string tooltip = sb.ToString();
 
-        // Parse "Fresh for X days" or "Fresh for X.X years" from tooltip
-        var match = System.Text.RegularExpressions.Regex.Match(tooltip, @"Fresh for ([\d.]+) (day|year)s?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // "less than an hour" is VS's sub-hour display — treat as ~0.5h so it sorts first
+        if (System.Text.RegularExpressions.Regex.IsMatch(tooltip, @"less than an hour", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) {
+            world.Logger.Debug($"[PerishSort] {stack.GetName()} -> less than an hour = 0.5h");
+            return 0.5;
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(tooltip, @"Fresh for ([\d.]+) (hour|day|year)s?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         if (match.Success) {
             if (double.TryParse(match.Groups[1].Value, out double value)) {
                 string unit = match.Groups[2].Value.ToLower();
                 double hours;
 
-                if (unit == "day") {
+                if (unit == "hour") {
+                    hours = value;
+                } else if (unit == "day") {
                     hours = value * 24;
                 } else if (unit == "year") {
                     hours = value * 365 * 24;
