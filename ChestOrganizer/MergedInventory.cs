@@ -282,8 +282,8 @@ public class MergedInventory : InventoryBase {
     private class IncludedInventory {
         private readonly MergedInventory parent;
         private readonly ICoreClientAPI api;
-        private readonly AssetLocation closeSound;
-        private readonly AssetLocation openSound;
+        private readonly SoundAttributes closeSound;
+        private readonly SoundAttributes openSound;
         private readonly string title;
         private readonly int cols;
 
@@ -356,7 +356,7 @@ public class MergedInventory : InventoryBase {
                 player.InventoryManager.OpenInventory(Inventory);
                 SendPacket(api, Position, open: true);
             }
-            api.Gui.PlaySound(openSound, randomizePitch: true);
+            api.Gui.PlaySound(openSound);
         }
 
         public void Close() {
@@ -364,7 +364,7 @@ public class MergedInventory : InventoryBase {
             // We need to do this again for lid to close... why??
             api.World.Player.InventoryManager.CloseInventory(Inventory);
             SendPacket(api, Position, open: false);
-            api.Gui.PlaySound(closeSound, randomizePitch: true);
+            api.Gui.PlaySound(closeSound);
         }
 
         public int UpdateCount(int start) {
