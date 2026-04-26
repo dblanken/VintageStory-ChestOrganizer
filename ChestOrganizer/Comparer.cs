@@ -49,41 +49,13 @@ public class Comparer : IComparer<ItemStack> {
     private static double? GetPerishHours(IWorldAccessor world, ItemSlot slot, ItemStack stack) {
         if (slot == null || stack == null) return null;
 
-        // Generate tooltip text to parse perish time
         var sb = new System.Text.StringBuilder();
         stack.Collectible?.GetHeldItemInfo(slot, sb, world, false);
-        string tooltip = sb.ToString();
 
-        // "less than an hour" is VS's sub-hour display — treat as ~0.5h so it sorts first
-        if (System.Text.RegularExpressions.Regex.IsMatch(tooltip, @"less than an hour", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) {
-            world.Logger.Debug($"[PerishSort] {stack.GetName()} -> less than an hour = 0.5h");
-            return 0.5;
-        }
-
-        var match = System.Text.RegularExpressions.Regex.Match(tooltip, @"Fresh for ([\d.]+) (hour|day|year)s?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        if (match.Success) {
-            if (double.TryParse(match.Groups[1].Value, out double value)) {
-                string unit = match.Groups[2].Value.ToLower();
-                double hours;
-
-                if (unit == "hour") {
-                    hours = value;
-                } else if (unit == "day") {
-                    hours = value * 24;
-                } else if (unit == "year") {
-                    hours = value * 365 * 24;
-                } else {
-                    return null;
-                }
-
-                world.Logger.Debug($"[PerishSort] {stack.GetName()} -> Fresh for {value} {unit}s = {hours:F0}h ({hours/24:F1}d, {hours/24/365:F2}y)");
-                return hours;
-            }
-        }
-
-        // No perish information found in tooltip
-        return null;
+        double? hours = PerishParser.ParseTooltip(sb.ToString());
+        if (hours.HasValue)
+            world.Logger.Debug($"[PerishSort] {stack.GetName()} -> {hours:F0}h ({hours/24:F1}d)");
+        return hours;
     }
 
     private static bool CompareNullableEnum<T>(T x, T y, out int res) {
